@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import DealBoard from './components/DealBoard';
@@ -9,7 +9,7 @@ import LandingPage from './components/LandingPage';
 import Auth from './components/Auth';
 import Settings from './components/Settings';
 import { Deal, Project, ViewState, DealStage, ProjectStage, Transaction, User } from './types';
-import { INITIAL_DEALS, INITIAL_PROJECTS, INITIAL_TRANSACTIONS } from './services/data';
+import { StorageService } from './services/storage';
 import { Menu } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -18,7 +18,7 @@ const App: React.FC = () => {
   const [showAuth, setShowAuth] = useState(false);
   const [authMode, setAuthMode] = useState<'LOGIN' | 'REGISTER'>('LOGIN');
 
-  // App Data State - Initialized to EMPTY by default for new instances
+  // App Data State
   const [currentView, setView] = useState<ViewState>('DASHBOARD');
   const [deals, setDeals] = useState<Deal[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -29,17 +29,41 @@ const App: React.FC = () => {
   // UI State
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Check Local Storage for Session
+  // Check Local Storage for Session on Mount
   useEffect(() => {
-    const storedUser = localStorage.getItem('reachmora_user');
+    const storedUser = localStorage.getItem('reachmora_user_session');
     if (storedUser) {
-      setUser(JSON.parse(storedUser));
       const parsedUser = JSON.parse(storedUser);
-      if (parsedUser.email === 'demo@reachmora.com' && deals.length === 0) {
-          loadSampleData();
-      }
+      setUser(parsedUser);
+      // Data loading happens in the user dependency effect below
     }
   }, []);
+
+  // Load User Data when User changes
+  useEffect(() => {
+      if (user) {
+          const userData = StorageService.getUserData(user.id);
+          setDeals(userData.deals);
+          setProjects(userData.projects);
+          setTransactions(userData.transactions);
+      } else {
+          // Clear data from state if no user
+          setDeals([]);
+          setProjects([]);
+          setTransactions([]);
+      }
+  }, [user]);
+
+  // Persist Data whenever it changes (Debouncing could be added for optimization, simplified here)
+  useEffect(() => {
+      if (user) {
+          StorageService.saveUserData(user.id, {
+              deals,
+              projects,
+              transactions
+          });
+      }
+  }, [deals, projects, transactions, user]);
 
   // Auto-hide notification
   useEffect(() => {
@@ -50,13 +74,17 @@ const App: React.FC = () => {
   }, [notification]);
 
   const loadSampleData = () => {
-      setDeals(INITIAL_DEALS);
-      setProjects(INITIAL_PROJECTS);
-      setTransactions(INITIAL_TRANSACTIONS);
+      if (!user) return;
+      const data = StorageService.loadSampleData(user.id);
+      setDeals(data.deals);
+      setProjects(data.projects);
+      setTransactions(data.transactions);
       setNotification('📂 Demo data loaded');
   };
 
   const resetData = () => {
+      if (!user) return;
+      StorageService.resetUserData(user.id);
       setDeals([]);
       setProjects([]);
       setTransactions([]);
@@ -68,33 +96,18 @@ const App: React.FC = () => {
       setUser(userData);
       setShowAuth(false);
       
-      if (stayLoggedIn) {
-          localStorage.setItem('reachmora_user', JSON.stringify(userData));
-      } else {
-          sessionStorage.setItem('reachmora_user', JSON.stringify(userData));
-      }
+      // We store the session in localStorage so refreshing the page keeps them logged in.
+      // In a real app, this would be a token.
+      localStorage.setItem('reachmora_user_session', JSON.stringify(userData));
 
-      if (authMode === 'REGISTER') {
-          resetData();
-          setNotification(`🎉 Welcome to CreatorCRM, ${userData.name}!`);
-      } else {
-          if (userData.email === 'demo@reachmora.com' || userData.companyName === 'ReachMora') {
-              loadSampleData();
-              setNotification(`👋 Welcome back, ${userData.name}!`);
-          } else {
-              resetData(); 
-              setNotification(`👋 Welcome back, ${userData.name}!`);
-          }
-      }
+      setNotification(`👋 Welcome back, ${userData.name}!`);
   };
 
   const handleLogout = () => {
       setUser(null);
-      localStorage.removeItem('reachmora_user');
-      sessionStorage.removeItem('reachmora_user');
-      resetData();
-      setNotification('Logged out successfully');
+      localStorage.removeItem('reachmora_user_session');
       setView('DASHBOARD'); 
+      setNotification('Logged out successfully');
   };
 
   const handleGetStarted = () => {
@@ -118,21 +131,20 @@ const App: React.FC = () => {
       stage: DealStage.NEW_INQUIRY,
       lastActivity: new Date().toISOString(),
     };
-    setDeals([...deals, newDeal]);
+    setDeals(prev => [...prev, newDeal]);
     setNotification('✨ New inquiry added to the pipeline!');
   };
 
   const handleUpdateDeal = (dealId: string, updates: Partial<Deal>) => {
-    const updatedDeals = deals.map(d => 
+    setDeals(prev => prev.map(d => 
       d.id === dealId ? { ...d, ...updates, lastActivity: new Date().toISOString() } : d
-    );
-    setDeals(updatedDeals);
+    ));
     setNotification('💾 Deal details updated');
   };
 
   const handleRemoveDeal = (dealId: string) => {
     if (window.confirm('Are you sure you want to remove this deal?')) {
-        setDeals(deals.filter(d => d.id !== dealId));
+        setDeals(prev => prev.filter(d => d.id !== dealId));
         setNotification('🗑️ Deal removed from pipeline');
     }
   };
@@ -141,10 +153,9 @@ const App: React.FC = () => {
     const deal = deals.find(d => d.id === dealId);
     if (!deal) return;
 
-    const updatedDeals = deals.map(d => 
+    setDeals(prev => prev.map(d => 
       d.id === dealId ? { ...d, stage: newStage, lastActivity: new Date().toISOString() } : d
-    );
-    setDeals(updatedDeals);
+    ));
 
     if (deal.stage !== DealStage.UPFRONT_RECEIVED && newStage === DealStage.UPFRONT_RECEIVED) {
       const newProject: Project = {
@@ -161,7 +172,7 @@ const App: React.FC = () => {
         archived: false
       };
       
-      setProjects([...projects, newProject]);
+      setProjects(prev => [...prev, newProject]);
       setNotification(`🚀 Project created for ${deal.brandName}!`);
 
       const upfrontAmount = deal.value * 0.5;
@@ -183,25 +194,22 @@ const App: React.FC = () => {
     const stageIndex = stages.indexOf(newStage);
     const progress = Math.round(((stageIndex + 1) / stages.length) * 100);
 
-    const updatedProjects = projects.map(p => 
+    setProjects(prev => prev.map(p => 
       p.id === projectId ? { ...p, stage: newStage, progress } : p
-    );
-    setProjects(updatedProjects);
+    ));
   };
 
   const handleUpdateProject = (projectId: string, updates: Partial<Project>) => {
-    const updatedProjects = projects.map(p => 
+    setProjects(prev => prev.map(p => 
       p.id === projectId ? { ...p, ...updates } : p
-    );
-    setProjects(updatedProjects);
+    ));
     setNotification('💾 Project updated');
   };
 
   const handleArchiveProject = (projectId: string) => {
-      const updatedProjects = projects.map(p => 
+      setProjects(prev => prev.map(p => 
         p.id === projectId ? { ...p, archived: true } : p
-      );
-      setProjects(updatedProjects);
+      ));
       setNotification('📦 Project archived to Finished Projects');
   };
 
@@ -210,13 +218,13 @@ const App: React.FC = () => {
           ...newTransaction,
           id: `t-${Date.now()}`
       };
-      setTransactions([transaction, ...transactions]);
+      setTransactions(prev => [transaction, ...prev]);
       setNotification(`💰 ${newTransaction.type === 'INCOME' ? 'Income' : 'Expense'} recorded`);
   };
 
   const handleDeleteTransaction = (id: string) => {
       if(window.confirm('Delete this transaction?')) {
-        setTransactions(transactions.filter(t => t.id !== id));
+        setTransactions(prev => prev.filter(t => t.id !== id));
         setNotification('🗑️ Transaction deleted');
       }
   };

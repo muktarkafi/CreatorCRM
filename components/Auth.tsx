@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { User } from '../types';
-import { Video, ArrowRight, Lock, Mail, User as UserIcon, Building2 } from 'lucide-react';
+import { StorageService } from '../services/storage';
+import { Video, ArrowRight, Lock, Mail, User as UserIcon, Building2, AlertCircle } from 'lucide-react';
 
 interface AuthProps {
   onLogin: (user: User, stayLoggedIn: boolean) => void;
@@ -10,6 +11,7 @@ interface AuthProps {
 const Auth: React.FC<AuthProps> = ({ onLogin, initialMode = 'LOGIN' }) => {
   const [mode, setMode] = useState<'LOGIN' | 'REGISTER'>(initialMode);
   const [stayLoggedIn, setStayLoggedIn] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     companyName: '',
@@ -19,16 +21,28 @@ const Auth: React.FC<AuthProps> = ({ onLogin, initialMode = 'LOGIN' }) => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Simulate Authentication
-    const user: User = {
-        id: `u-${Date.now()}`,
-        name: mode === 'REGISTER' ? formData.name : 'Creator',
-        email: formData.email,
-        companyName: mode === 'REGISTER' ? formData.companyName : 'ReachMora' // Default fallback for login mock
-    };
+    setError(null);
 
-    onLogin(user, stayLoggedIn);
+    try {
+        let user: User;
+
+        if (mode === 'REGISTER') {
+            const newUser: User = {
+                id: `u-${Date.now()}`,
+                name: formData.name,
+                email: formData.email,
+                companyName: formData.companyName
+            };
+            user = StorageService.register(newUser, formData.password);
+        } else {
+            user = StorageService.login(formData.email, formData.password);
+        }
+
+        onLogin(user, stayLoggedIn);
+
+    } catch (err: any) {
+        setError(err.message || 'An error occurred. Please try again.');
+    }
   };
 
   return (
@@ -50,6 +64,13 @@ const Auth: React.FC<AuthProps> = ({ onLogin, initialMode = 'LOGIN' }) => {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
+             {error && (
+                 <div className="bg-red-500/10 border border-red-500/50 rounded-xl p-3 flex items-center gap-2 text-red-400 text-sm">
+                     <AlertCircle className="w-4 h-4 shrink-0" />
+                     {error}
+                 </div>
+             )}
+
              {mode === 'REGISTER' && (
                  <>
                     <div>
@@ -141,7 +162,10 @@ const Auth: React.FC<AuthProps> = ({ onLogin, initialMode = 'LOGIN' }) => {
              <p className="text-sm text-slate-400">
                  {mode === 'LOGIN' ? "Don't have an account?" : "Already have an account?"}
                  <button 
-                    onClick={() => setMode(mode === 'LOGIN' ? 'REGISTER' : 'LOGIN')}
+                    onClick={() => {
+                        setMode(mode === 'LOGIN' ? 'REGISTER' : 'LOGIN');
+                        setError(null);
+                    }}
                     className="text-white font-medium ml-2 hover:underline"
                  >
                      {mode === 'LOGIN' ? 'Register' : 'Log in'}
