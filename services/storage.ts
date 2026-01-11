@@ -1,4 +1,4 @@
-import { Deal, Project, Transaction, User } from '../types';
+import { Deal, Project, Transaction, User, Course } from '../types';
 import { INITIAL_DEALS, INITIAL_PROJECTS, INITIAL_TRANSACTIONS } from './data';
 
 const USERS_KEY = 'reachmora_users_db';
@@ -8,6 +8,7 @@ export interface UserData {
   deals: Deal[];
   projects: Project[];
   transactions: Transaction[];
+  courses: Course[];
 }
 
 export const StorageService = {
@@ -36,7 +37,8 @@ export const StorageService = {
     StorageService.saveUserData(user.id, {
         deals: [],
         projects: [],
-        transactions: []
+        transactions: [],
+        courses: []
     });
 
     // Remove password before returning
@@ -65,18 +67,30 @@ export const StorageService = {
   getUserData: (userId: string): UserData => {
     const dataJson = localStorage.getItem(`${DATA_PREFIX}${userId}`);
     if (dataJson) {
-      return JSON.parse(dataJson);
+      const parsed = JSON.parse(dataJson);
+      // Migration/Safety: Ensure new fields exist if loading old data
+      return {
+          deals: parsed.deals || [],
+          projects: parsed.projects || [],
+          transactions: parsed.transactions || [],
+          courses: parsed.courses || []
+      };
     }
     // Return empty structure if no data exists yet
-    return { deals: [], projects: [], transactions: [] };
+    return { deals: [], projects: [], transactions: [], courses: [] };
   },
 
   saveUserData: (userId: string, data: UserData) => {
     localStorage.setItem(`${DATA_PREFIX}${userId}`, JSON.stringify(data));
   },
 
+  // Export Data for Offline/JSON use
+  exportData: (userId: string): UserData => {
+      return StorageService.getUserData(userId);
+  },
+
   resetUserData: (userId: string) => {
-    const emptyData = { deals: [], projects: [], transactions: [] };
+    const emptyData = { deals: [], projects: [], transactions: [], courses: [] };
     localStorage.setItem(`${DATA_PREFIX}${userId}`, JSON.stringify(emptyData));
     return emptyData;
   },
@@ -85,7 +99,8 @@ export const StorageService = {
       const sampleData = {
           deals: INITIAL_DEALS,
           projects: INITIAL_PROJECTS,
-          transactions: INITIAL_TRANSACTIONS
+          transactions: INITIAL_TRANSACTIONS,
+          courses: []
       };
       localStorage.setItem(`${DATA_PREFIX}${userId}`, JSON.stringify(sampleData));
       return sampleData;

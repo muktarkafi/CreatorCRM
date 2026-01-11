@@ -45,6 +45,7 @@ export const INITIAL_PROJECTS: Project[] = [
   {
     id: 'p-1',
     dealId: 'd-old-1',
+    type: 'SPONSORED',
     brandName: 'PhotoMagic',
     title: 'PhotoMagic AI Review',
     stage: ProjectStage.EDITING,
@@ -57,6 +58,7 @@ export const INITIAL_PROJECTS: Project[] = [
   {
     id: 'p-2',
     dealId: 'd-old-2',
+    type: 'SPONSORED',
     brandName: 'DataSift',
     title: 'How to use DataSift for Analytics',
     stage: ProjectStage.SCRIPTING,
@@ -69,6 +71,7 @@ export const INITIAL_PROJECTS: Project[] = [
   {
     id: 'p-3',
     dealId: 'd-old-3',
+    type: 'SPONSORED',
     brandName: 'Voiceify',
     title: 'Voiceify vs The World',
     stage: ProjectStage.PUBLISHED,

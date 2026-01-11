@@ -1,44 +1,74 @@
 import React, { useMemo } from 'react';
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell
 } from 'recharts';
-import { DollarSign, Briefcase, AlertCircle, TrendingUp, Eye, EyeOff } from 'lucide-react';
-import { Deal, Project, DealStage, ProjectStage, Transaction } from '../types';
+import { DollarSign, Briefcase, AlertCircle, TrendingUp, Eye, EyeOff, PlaySquare, GraduationCap, KanbanSquare, ArrowRight } from 'lucide-react';
+import { Deal, Project, DealStage, ProjectStage, Transaction, Course } from '../types';
 
 interface DashboardProps {
   deals: Deal[];
   projects: Project[];
   transactions: Transaction[];
+  courses: Course[];
   privacyMode: boolean;
   setPrivacyMode: (mode: boolean) => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ deals, projects, transactions, privacyMode, setPrivacyMode }) => {
-  const activeDeals = deals.filter(d => d.stage !== DealStage.REJECTED && d.stage !== DealStage.UPFRONT_RECEIVED);
-  const activeProjects = projects.filter(p => p.stage !== ProjectStage.PUBLISHED);
+// Helper for stage colors
+const getProgressColorClass = (stage: ProjectStage) => {
+    switch (stage) {
+        case ProjectStage.TOOL_ACCESS:
+        case ProjectStage.CONCEPT: return 'bg-rose-500';
+        case ProjectStage.FILMING: return 'bg-orange-500';
+        case ProjectStage.SCRIPTING: return 'bg-amber-400';
+        case ProjectStage.EDITING: return 'bg-indigo-500';
+        case ProjectStage.REVIEW: return 'bg-blue-500';
+        case ProjectStage.FINAL_PAYMENT: return 'bg-emerald-400';
+        case ProjectStage.PUBLISHED: return 'bg-emerald-600';
+        default: return 'bg-slate-500';
+    }
+};
+
+const getDealColorClass = (stage: DealStage) => {
+    switch (stage) {
+        case DealStage.NEW_INQUIRY: return 'bg-blue-500';
+        case DealStage.RATE_SENT: return 'bg-purple-500';
+        case DealStage.NEGOTIATION: return 'bg-orange-500';
+        case DealStage.ACCEPTED_AWAITING_UPFRONT: return 'bg-rose-500';
+        case DealStage.UPFRONT_RECEIVED: return 'bg-emerald-500';
+        default: return 'bg-slate-500';
+    }
+};
+
+// Deal Progress Percentage
+const getDealProgress = (stage: DealStage) => {
+    switch (stage) {
+        case DealStage.NEW_INQUIRY: return 15;
+        case DealStage.RATE_SENT: return 40;
+        case DealStage.NEGOTIATION: return 60;
+        case DealStage.ACCEPTED_AWAITING_UPFRONT: return 90;
+        case DealStage.UPFRONT_RECEIVED: return 100;
+        default: return 0;
+    }
+};
+
+const Dashboard: React.FC<DashboardProps> = ({ deals, projects, transactions, courses, privacyMode, setPrivacyMode }) => {
+  const activeDeals = deals.filter(d => d.stage !== DealStage.REJECTED && d.stage !== DealStage.CANCELLED);
+  const activeProjects = projects.filter(p => !p.archived && p.type === 'SPONSORED');
+  const activeTutorials = projects.filter(p => !p.archived && p.type === 'TUTORIAL');
   
   const activeDealsCount = activeDeals.length;
   const activeProjectsCount = activeProjects.length;
   
-  // Calculate projected income (based on active deal value)
   const pipelineValue = activeDeals.reduce((acc, curr) => acc + curr.value, 0);
 
-  // Dynamic Action Required Calculation
   const actionRequiredCount = useMemo(() => {
-      // 1. Deals waiting for payment
       const dealsWaiting = deals.filter(d => d.stage === DealStage.ACCEPTED_AWAITING_UPFRONT).length;
-      
-      // 2. Projects overdue or needing review
       const now = new Date();
       const projectsAction = projects.filter(p => {
           if (p.stage === ProjectStage.PUBLISHED || p.archived) return false;
-          
-          const isOverdue = new Date(p.dueDate) < now;
-          const isReviewPending = p.stage === ProjectStage.REVIEW;
-          
-          return isOverdue || isReviewPending;
+          return new Date(p.dueDate) < now || p.stage === ProjectStage.REVIEW;
       }).length;
-
       return dealsWaiting + projectsAction;
   }, [deals, projects]);
 
@@ -49,66 +79,51 @@ const Dashboard: React.FC<DashboardProps> = ({ deals, projects, transactions, pr
     { label: 'Action Required', value: actionRequiredCount, icon: AlertCircle, color: 'bg-rose-500', isPrivate: false },
   ];
 
-  // Helper to get color based on progress (0-100)
-  const getProgressColor = (percent: number) => {
-    if (percent < 25) return 'bg-red-500';
-    if (percent < 50) return 'bg-orange-500';
-    if (percent < 75) return 'bg-yellow-500';
-    if (percent < 90) return 'bg-lime-500';
-    return 'bg-emerald-500';
-  };
+  // Pipeline Funnel Data
+  const funnelData = useMemo(() => {
+      const stages = [
+          { id: DealStage.NEW_INQUIRY, label: 'Inquiry', color: '#3b82f6' },
+          { id: DealStage.RATE_SENT, label: 'Rate Sent', color: '#a855f7' },
+          { id: DealStage.NEGOTIATION, label: 'Negot.', color: '#f97316' },
+          { id: DealStage.ACCEPTED_AWAITING_UPFRONT, label: 'Accepted', color: '#f43f5e' },
+          { id: DealStage.UPFRONT_RECEIVED, label: 'Production', color: '#10b981' },
+      ];
+      return stages.map(s => {
+          const count = activeDeals.filter(d => d.stage === s.id).length;
+          const value = activeDeals.filter(d => d.stage === s.id).reduce((sum, d) => sum + d.value, 0);
+          return { ...s, count, value };
+      });
+  }, [activeDeals]);
 
-  const projectStages = Object.values(ProjectStage);
-  const dealStages = [DealStage.NEW_INQUIRY, DealStage.RATE_SENT, DealStage.NEGOTIATION, DealStage.ACCEPTED_AWAITING_UPFRONT, DealStage.UPFRONT_RECEIVED];
-
-  // Generate Real Chart Data from Transactions
+  // Chart Data
   const chartData = useMemo(() => {
-    const monthlyDataMap = new Map<string, {name: string, income: number}>();
-    
-    // Sort transactions by date first to ensure months appear in order if we iterated chronologically
-    // A simplified approach for dashboard:
     const sorted = [...transactions].sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    let currentBalance = 0;
+    const growthData: { date: string, balance: number }[] = [];
+    if (sorted.length === 0) return [{ date: 'Start', balance: 0 }];
+    growthData.push({ date: 'Start', balance: 0 });
 
     sorted.forEach(t => {
-        if (t.type === 'INCOME') {
-            const date = new Date(t.date);
-            const monthKey = date.toLocaleString('default', { month: 'short' });
-            
-            if (!monthlyDataMap.has(monthKey)) {
-                monthlyDataMap.set(monthKey, { name: monthKey, income: 0 });
-            }
-            monthlyDataMap.get(monthKey)!.income += t.amount;
-        }
+        if (t.type === 'INCOME') currentBalance += t.amount;
+        else currentBalance -= t.amount;
+        growthData.push({
+            date: new Date(t.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+            balance: currentBalance
+        });
     });
-
-    // If empty, return placeholder
-    if (monthlyDataMap.size === 0) {
-        return [
-            { name: 'Jan', income: 0 }, { name: 'Feb', income: 0 }, { name: 'Mar', income: 0 }
-        ]
-    }
-
-    return Array.from(monthlyDataMap.values());
+    return growthData;
   }, [transactions]);
 
-  // Current Month Income
   const currentMonthIncome = useMemo(() => {
     const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-
     return transactions
         .filter(t => t.type === 'INCOME')
-        .filter(t => {
-            const d = new Date(t.date);
-            return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-        })
+        .filter(t => new Date(t.date).getMonth() === now.getMonth() && new Date(t.date).getFullYear() === now.getFullYear())
         .reduce((sum, t) => sum + t.amount, 0);
   }, [transactions]);
 
-
   return (
-    <div className="p-8 pt-16 lg:pt-8 space-y-8 animate-fade-in">
+    <div className="p-8 pt-16 lg:pt-8 space-y-8 animate-fade-in pb-20">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
           <h1 className="text-3xl font-bold text-white mb-2">Welcome back, ReachMora</h1>
@@ -151,63 +166,154 @@ const Dashboard: React.FC<DashboardProps> = ({ deals, projects, transactions, pr
         })}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Ongoing Projects Progress */}
+      {/* PIPELINE VELOCITY FUNNEL (New) */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+          <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+              <KanbanSquare className="w-5 h-5 text-indigo-500" />
+              Pipeline Velocity
+              <span className="text-xs font-normal text-slate-500 ml-2 bg-slate-800 px-2 py-1 rounded">
+                  {activeDeals.length} active deals
+              </span>
+          </h3>
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4 relative">
+              {/* Connector Line */}
+              <div className="hidden md:block absolute top-1/2 left-0 right-0 h-0.5 bg-slate-800 -z-0 -translate-y-4"></div>
+              
+              {funnelData.map((stage, i) => (
+                  <div key={stage.label} className="flex flex-col items-center w-full z-10 relative group">
+                      <div className="mb-3 relative">
+                          <div 
+                              className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold shadow-lg transition-transform group-hover:scale-110"
+                              style={{ backgroundColor: stage.count > 0 ? stage.color : '#1e293b', opacity: stage.count > 0 ? 1 : 0.5 }}
+                          >
+                              {stage.count}
+                          </div>
+                          {stage.count > 0 && (
+                            <div className="absolute -top-2 -right-2 w-3 h-3 bg-white rounded-full animate-pulse"></div>
+                          )}
+                      </div>
+                      <span className="text-xs font-bold text-slate-300 mb-1">{stage.label}</span>
+                      <span className={`text-[10px] ${privacyMode ? 'blur-[2px]' : 'text-slate-500'}`}>
+                          ${stage.value.toLocaleString()}
+                      </span>
+                  </div>
+              ))}
+          </div>
+      </div>
+
+      {/* Production Overview Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        
+        {/* Active Collaborations List */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-            <h3 className="text-lg font-bold text-white mb-4">Ongoing Projects Status</h3>
+            <div className="flex justify-between items-center mb-4">
+                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                    <Briefcase className="w-5 h-5 text-indigo-500" />
+                    Deal Progress
+                </h3>
+            </div>
             <div className="space-y-4 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
-                {activeProjects.length === 0 && <p className="text-slate-500 text-sm italic">No active projects.</p>}
-                {activeProjects.map(project => {
-                    const stageIndex = projectStages.indexOf(project.stage);
-                    const progress = Math.round(((stageIndex + 1) / (projectStages.length - 1)) * 100); // Exclude Published from count effectively
-                    return (
-                        <div key={project.id}>
-                            <div className="flex justify-between text-xs mb-1">
-                                <span className="font-semibold text-slate-200">{project.title}</span>
-                                <span className="text-slate-400">{project.stage}</span>
-                            </div>
-                            <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-                                <div 
-                                    className={`h-full rounded-full ${getProgressColor(progress)} transition-all duration-500`} 
-                                    style={{ width: `${progress}%` }}
-                                />
-                            </div>
+                {activeDeals.length === 0 && <p className="text-slate-500 text-sm italic">No active deals in pipeline.</p>}
+                {activeDeals.map(deal => (
+                    <div key={deal.id}>
+                        <div className="flex justify-between text-xs mb-1">
+                            <span className="font-semibold text-slate-200">{deal.brandName}</span>
+                            <span className="text-slate-400">{deal.stage}</span>
                         </div>
-                    );
-                })}
+                        <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                            <div 
+                                className={`h-full rounded-full ${getDealColorClass(deal.stage)} transition-all duration-500`} 
+                                style={{ width: `${getDealProgress(deal.stage)}%` }}
+                            />
+                        </div>
+                    </div>
+                ))}
             </div>
         </div>
 
-        {/* Collaborations Progress */}
+        {/* Sponsored Projects */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-            <h3 className="text-lg font-bold text-white mb-4">Collaboration Pipeline</h3>
+            <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-emerald-500" />
+                Sponsored Projects
+            </h3>
             <div className="space-y-4 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
-                {activeDeals.length === 0 && <p className="text-slate-500 text-sm italic">No active collaborations.</p>}
-                {activeDeals.map(deal => {
-                    const stageIndex = dealStages.indexOf(deal.stage);
-                    const progress = Math.round(((stageIndex + 1) / dealStages.length) * 100);
-                    return (
-                        <div key={deal.id}>
-                            <div className="flex justify-between text-xs mb-1">
-                                <span className="font-semibold text-slate-200">{deal.brandName}</span>
-                                <span className="text-slate-400">{deal.stage}</span>
-                            </div>
-                            <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-                                <div 
-                                    className={`h-full rounded-full ${getProgressColor(progress)} transition-all duration-500`} 
-                                    style={{ width: `${progress}%` }}
-                                />
-                            </div>
+                {activeProjects.length === 0 && <p className="text-slate-500 text-sm italic">No active sponsored projects.</p>}
+                {activeProjects.map(project => (
+                    <div key={project.id}>
+                        <div className="flex justify-between text-xs mb-1">
+                            <span className="font-semibold text-slate-200">{project.brandName} - {project.title}</span>
+                            <span className="text-slate-400">{project.stage}</span>
                         </div>
-                    );
-                })}
+                        <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                            <div 
+                                className={`h-full rounded-full ${getProgressColorClass(project.stage)} transition-all duration-500`} 
+                                style={{ width: `${project.progress}%` }}
+                            />
+                        </div>
+                    </div>
+                ))}
             </div>
         </div>
+
+        {/* Tutorials */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                <PlaySquare className="w-5 h-5 text-pink-500" />
+                Free Tutorials
+            </h3>
+            <div className="space-y-4 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
+                {activeTutorials.length === 0 && <p className="text-slate-500 text-sm italic">No active tutorials.</p>}
+                {activeTutorials.map(project => (
+                    <div key={project.id}>
+                        <div className="flex justify-between text-xs mb-1">
+                            <span className="font-semibold text-slate-200">{project.title}</span>
+                            <span className="text-slate-400">{project.stage}</span>
+                        </div>
+                        <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                            <div 
+                                className={`h-full rounded-full ${getProgressColorClass(project.stage)} transition-all duration-500`} 
+                                style={{ width: `${project.progress}%` }}
+                            />
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+
+        {/* Course Progress */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                <GraduationCap className="w-5 h-5 text-blue-500" />
+                Course Creation
+            </h3>
+             <div className="space-y-4 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
+                {courses.length === 0 && <p className="text-slate-500 text-sm italic">No courses in development.</p>}
+                {courses.map(course => (
+                    <div key={course.id}>
+                        <div className="flex justify-between text-xs mb-1">
+                            <span className="font-semibold text-slate-200">{course.title}</span>
+                            <span className="text-blue-400">{course.progress}%</span>
+                        </div>
+                        <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden border border-slate-700/50">
+                            <div 
+                                className={`h-full rounded-full bg-gradient-to-r from-blue-600 to-cyan-400 transition-all duration-500`} 
+                                style={{ width: `${course.progress}%` }}
+                            />
+                        </div>
+                        <div className="flex justify-between mt-1">
+                            <span className="text-[10px] text-slate-500">{course.chapters.length} / {course.totalChapters} Chapters</span>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-96">
         <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl p-6 relative">
-          <h3 className="text-lg font-bold text-white mb-6">Revenue Trend (Real Data)</h3>
+          <h3 className="text-lg font-bold text-white mb-6">Net Income Growth</h3>
           {privacyMode && (
              <div className="absolute inset-0 bg-slate-900/10 backdrop-blur-sm z-10 flex items-center justify-center rounded-2xl border border-slate-800">
                 <div className="bg-slate-800 px-4 py-2 rounded-lg flex items-center gap-2 text-slate-400 shadow-xl">
@@ -220,34 +326,34 @@ const Dashboard: React.FC<DashboardProps> = ({ deals, projects, transactions, pr
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData}>
                 <defs>
-                  <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                  <linearGradient id="colorGrowth" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                <XAxis dataKey="name" stroke="#64748b" axisLine={false} tickLine={false} />
+                <XAxis dataKey="date" stroke="#64748b" axisLine={false} tickLine={false} minTickGap={30} />
                 <YAxis stroke="#64748b" axisLine={false} tickLine={false} tickFormatter={(value) => `$${value/1000}k`} />
                 <Tooltip 
                   contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', color: '#f8fafc' }} 
-                  itemStyle={{ color: '#818cf8' }}
+                  itemStyle={{ color: '#34d399' }}
+                  formatter={(value: number) => [`$${value.toLocaleString()}`, 'Net Worth']}
                 />
-                <Area type="monotone" dataKey="income" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorIncome)" />
+                <Area type="monotone" dataKey="balance" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorGrowth)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
 
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col">
-          <h3 className="text-lg font-bold text-white mb-6">Recent Activity</h3>
+          <h3 className="text-lg font-bold text-white mb-6">Recent Transactions</h3>
           <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
-            {/* Displaying a mix of recent updates placeholder + actual recent transactions could go here */}
             {transactions.slice(0, 5).map((t, i) => (
               <div key={i} className="flex gap-4 items-start p-3 hover:bg-slate-800/50 rounded-xl transition-colors cursor-pointer group">
                 <div className={`w-2 h-2 mt-2 rounded-full shrink-0 group-hover:scale-125 transition-transform ${t.type === 'INCOME' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
                 <div>
                   <p className="text-sm text-slate-200">
-                      {t.type === 'INCOME' ? 'Received' : 'Paid'} <span className="font-semibold text-white">${t.amount}</span> for {t.description}
+                      {t.type === 'INCOME' ? 'Received' : 'Paid'} <span className={`font-semibold ${privacyMode ? 'blur-sm' : 'text-white'}`}>${t.amount}</span> for {t.description}
                   </p>
                   <p className="text-xs text-slate-500 mt-1">{t.date}</p>
                 </div>

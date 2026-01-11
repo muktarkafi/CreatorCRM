@@ -7,18 +7,21 @@ export enum DealStage {
   ACCEPTED_AWAITING_UPFRONT = 'Accepted Awaiting Upfront',
   UPFRONT_RECEIVED = 'Upfront Received',
   REJECTED = 'Rejected',
+  CANCELLED = 'Cancelled', // New Stage
 }
 
 export enum ProjectStage {
-  TOOL_ACCESS = 'Tool Access',
-  TESTING = 'Testing & Research',
-  FILMING = 'Filming & Screen Cap',
+  TOOL_ACCESS = 'Tool Access', // For sponsored
+  CONCEPT = 'Concept & Research', // For tutorials
   SCRIPTING = 'Scripting',
+  FILMING = 'Filming & Screen Cap',
   EDITING = 'Voiceover & Editing',
   REVIEW = 'Review Pending',
   FINAL_PAYMENT = 'Final Payment',
   PUBLISHED = 'Published',
 }
+
+export type ProjectType = 'SPONSORED' | 'TUTORIAL';
 
 export type IncomeCategory = 'YouTube Partner' | 'Affiliate Payment' | 'Link Placement' | 'Course Sales' | 'Digital Products' | 'Sponsorship' | 'Other';
 export type ExpenseCategory = 'Software Subscription' | 'Editing Services' | 'Equipment/Tools' | 'Freelancers' | 'Marketing' | 'Other';
@@ -53,18 +56,35 @@ export interface Deal {
 
 export interface Project {
   id: string;
-  dealId: string;
+  dealId?: string; // Optional for tutorials
+  type: ProjectType;
   title: string;
-  brandName: string;
+  brandName: string; // For tutorials, this might be "Self" or the topic
   stage: ProjectStage;
   dueDate: string;
   upfrontPaid: boolean;
   finalPaid: boolean;
-  totalValue: number;
+  totalValue: number; // 0 for tutorials
   progress: number; // 0-100
   scriptUrl?: string;
   videoUrl?: string;
   archived?: boolean;
+}
+
+export interface Chapter {
+  id: string;
+  title: string;
+  stage: ProjectStage;
+}
+
+export interface Course {
+  id: string;
+  title: string;
+  description: string;
+  totalChapters: number;
+  chapters: Chapter[];
+  progress: number;
+  thumbnailUrl?: string;
 }
 
 export interface Metric {
@@ -75,4 +95,4 @@ export interface Metric {
   icon: React.ElementType;
 }
 
-export type ViewState = 'DASHBOARD' | 'DEALS' | 'PROJECTS' | 'FINISHED_PROJECTS' | 'PAYMENTS' | 'INSIGHTS' | 'SETTINGS';
+export type ViewState = 'DASHBOARD' | 'DEALS' | 'PROJECTS' | 'TUTORIALS' | 'COURSES' | 'FINISHED_PROJECTS' | 'PAYMENTS' | 'INSIGHTS' | 'SETTINGS';

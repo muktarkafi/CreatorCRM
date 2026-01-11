@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, KanbanSquare, Clapperboard, CreditCard, BarChart3, Settings, LogOut, Video, Archive, X } from 'lucide-react';
+import { LayoutDashboard, KanbanSquare, Clapperboard, CreditCard, BarChart3, Settings, LogOut, Video, Archive, X, GraduationCap, PlaySquare } from 'lucide-react';
 import { ViewState } from '../types';
 
 interface SidebarProps {
@@ -16,6 +16,8 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, companyName, on
     { id: 'DASHBOARD', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'DEALS', label: 'Collaborations', icon: KanbanSquare },
     { id: 'PROJECTS', label: 'Ongoing Projects', icon: Clapperboard },
+    { id: 'TUTORIALS', label: 'Free Tutorials', icon: PlaySquare },
+    { id: 'COURSES', label: 'Course Manager', icon: GraduationCap },
     { id: 'FINISHED_PROJECTS', label: 'Finished Projects', icon: Archive },
     { id: 'PAYMENTS', label: 'Payments', icon: CreditCard },
     { id: 'INSIGHTS', label: 'Insights', icon: BarChart3 },

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Deal, DealStage } from '../types';
-import { MoreHorizontal, Calendar, DollarSign, Mail, AlertTriangle, ChevronRight, ChevronLeft, Plus, X, Pencil, Trash2 } from 'lucide-react';
+import { MoreHorizontal, Calendar, DollarSign, Mail, AlertTriangle, ChevronRight, ChevronLeft, Plus, X, Pencil, Trash2, RefreshCcw } from 'lucide-react';
 
 interface DealBoardProps {
   deals: Deal[];
@@ -22,13 +22,23 @@ const STAGE_COLORS: Record<DealStage, string> = {
   [DealStage.NEW_INQUIRY]: 'border-blue-500/50',
   [DealStage.RATE_SENT]: 'border-purple-500/50',
   [DealStage.NEGOTIATION]: 'border-orange-500/50',
-  [DealStage.ACCEPTED_AWAITING_UPFRONT]: 'border-rose-500', // Highlighted
+  [DealStage.ACCEPTED_AWAITING_UPFRONT]: 'border-rose-500', 
   [DealStage.UPFRONT_RECEIVED]: 'border-emerald-500/50',
   [DealStage.REJECTED]: 'border-slate-700',
+  [DealStage.CANCELLED]: 'border-slate-800',
+};
+
+// Date helper to prevent Invalid Date errors
+const formatDate = (dateString?: string) => {
+    if (!dateString) return 'TBD';
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return 'Invalid Date';
+    return date.toLocaleDateString();
 };
 
 const DealBoard: React.FC<DealBoardProps> = ({ deals, onMoveDeal, onAddDeal, onUpdateDeal, onRemoveDeal }) => {
   const [draggedDealId, setDraggedDealId] = useState<string | null>(null);
+  const [showCancelled, setShowCancelled] = useState(false);
   
   // Modal State
   const [modalType, setModalType] = useState<'ADD' | 'EDIT' | null>(null);
@@ -82,9 +92,9 @@ const DealBoard: React.FC<DealBoardProps> = ({ deals, onMoveDeal, onAddDeal, onU
     
     if (modalType === 'ADD') {
         onAddDeal({
-            brandName: '', // Will be auto-filled in App.tsx
+            brandName: '', 
             toolName: formData.toolName,
-            contactEmail: '', // Not needed as per user request
+            contactEmail: '', 
             value: formData.value,
             expectedPublishDate: formData.expectedPublishDate
         });
@@ -99,12 +109,19 @@ const DealBoard: React.FC<DealBoardProps> = ({ deals, onMoveDeal, onAddDeal, onU
     setEditingDealId(null);
   };
 
+  // Helper function to handle cancellation/deletion
+  const handleCancelDeal = (dealId: string) => {
+      onMoveDeal(dealId, DealStage.CANCELLED);
+  };
+
+  const cancelledDeals = deals.filter(d => d.stage === DealStage.CANCELLED);
+
   return (
     <div className="p-6 h-full flex flex-col overflow-hidden relative">
       <div className="flex justify-between items-center mb-6 shrink-0">
         <div>
            <h2 className="text-2xl font-bold text-white">Collaboration Pipeline</h2>
-           <p className="text-slate-400 text-sm">Drag deals to update their status. Moving to "Upfront Received" creates a project.</p>
+           <p className="text-slate-400 text-sm">Drag deals to update status.</p>
         </div>
         <button 
           onClick={openAddModal}
@@ -115,7 +132,7 @@ const DealBoard: React.FC<DealBoardProps> = ({ deals, onMoveDeal, onAddDeal, onU
         </button>
       </div>
       
-      <div className="flex-1 flex gap-4 overflow-x-auto pb-4 items-start h-full">
+      <div className="flex-1 flex gap-4 overflow-x-auto pb-4 items-start h-full mb-4">
         {STAGES.map((stage) => {
           const stageDeals = deals.filter(d => d.stage === stage);
           const isWarningStage = stage === DealStage.ACCEPTED_AWAITING_UPFRONT;
@@ -152,17 +169,22 @@ const DealBoard: React.FC<DealBoardProps> = ({ deals, onMoveDeal, onAddDeal, onU
                       <h4 className="font-bold text-white text-sm">{deal.brandName}</h4>
                       <div className="flex gap-1">
                           <button 
-                            onClick={() => openEditModal(deal)}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                openEditModal(deal);
+                            }}
                             className="text-slate-500 hover:text-indigo-400 p-1 rounded hover:bg-slate-700 transition-colors"
-                            title="Edit Deal Value/Date"
+                            title="Edit Deal"
                           >
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
-                          {/* Remove button only visible on group hover or focus */}
                           <button 
-                            onClick={() => onRemoveDeal(deal.id)}
-                            className="text-slate-500 hover:text-red-400 p-1 rounded hover:bg-slate-700 transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
-                            title="Remove Deal"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleCancelDeal(deal.id);
+                            }}
+                            className="text-slate-500 hover:text-red-400 p-1 rounded hover:bg-slate-700 transition-colors"
+                            title="Move to Cancelled"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -178,25 +200,12 @@ const DealBoard: React.FC<DealBoardProps> = ({ deals, onMoveDeal, onAddDeal, onU
                       </div>
                       <div className="flex items-center gap-2 text-xs text-slate-400">
                         <Calendar className="w-3 h-3 text-slate-500" />
-                        <span>Est: {deal.expectedPublishDate || 'TBD'}</span>
+                        <span>Est: {formatDate(deal.expectedPublishDate)}</span>
                       </div>
-                      {deal.contactEmail && (
-                        <div className="flex items-center gap-2 text-xs text-slate-400">
-                            <Mail className="w-3 h-3 text-slate-500" />
-                            <span className="truncate max-w-[150px]">{deal.contactEmail}</span>
-                        </div>
-                      )}
                     </div>
-
-                    {deal.notes && (
-                      <div className="bg-slate-900/50 p-2 rounded text-[10px] text-slate-400 mb-3 border border-slate-700/50">
-                        {deal.notes}
-                      </div>
-                    )}
 
                     <div className="flex justify-between items-center mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         <div className="flex gap-1">
-                             {/* Mobile/Accessiblity Buttons */}
                              {stage !== STAGES[0] && (
                                 <button 
                                     onClick={() => onMoveDeal(deal.id, STAGES[STAGES.indexOf(stage) - 1])}
@@ -212,7 +221,6 @@ const DealBoard: React.FC<DealBoardProps> = ({ deals, onMoveDeal, onAddDeal, onU
                                 </button>
                              )}
                         </div>
-                        <span className="text-[10px] text-slate-600">Drag to move</span>
                     </div>
 
                     {isWarningStage && (
@@ -228,6 +236,40 @@ const DealBoard: React.FC<DealBoardProps> = ({ deals, onMoveDeal, onAddDeal, onU
         })}
       </div>
 
+      {/* Cancelled Deals Section */}
+      <div className="mt-auto border-t border-slate-800 pt-4 shrink-0">
+          <button 
+            onClick={() => setShowCancelled(!showCancelled)}
+            className="flex items-center gap-2 text-slate-500 hover:text-slate-300 text-sm font-medium mb-3"
+          >
+              <Trash2 className="w-4 h-4" />
+              Cancelled History ({cancelledDeals.length})
+              <ChevronRight className={`w-4 h-4 transition-transform ${showCancelled ? 'rotate-90' : ''}`} />
+          </button>
+          
+          {showCancelled && (
+              <div className="bg-slate-900/50 rounded-xl p-4 flex gap-4 overflow-x-auto h-40 custom-scrollbar border border-slate-800">
+                  {cancelledDeals.length === 0 && <span className="text-slate-600 text-sm">No cancelled deals.</span>}
+                  {cancelledDeals.map(deal => (
+                      <div key={deal.id} className="min-w-[200px] bg-slate-800 p-3 rounded-lg border border-slate-700 opacity-70 hover:opacity-100 transition-opacity">
+                          <div className="flex justify-between items-start">
+                             <h4 className="text-slate-300 text-sm font-bold line-through">{deal.brandName}</h4>
+                             <button 
+                                onClick={() => onMoveDeal(deal.id, DealStage.NEW_INQUIRY)}
+                                title="Restore Deal"
+                                className="text-emerald-500 hover:bg-slate-700 p-1 rounded"
+                             >
+                                 <RefreshCcw className="w-3 h-3" />
+                             </button>
+                          </div>
+                          <p className="text-xs text-slate-500">{deal.toolName}</p>
+                          <p className="text-xs text-slate-500 mt-2">Value: ${deal.value}</p>
+                      </div>
+                  ))}
+              </div>
+          )}
+      </div>
+
       {/* Shared Modal (Add / Edit) */}
       {modalType && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm animate-fade-in">
@@ -241,7 +283,6 @@ const DealBoard: React.FC<DealBoardProps> = ({ deals, onMoveDeal, onAddDeal, onU
               </button>
             </div>
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Only show Tool Name in Add mode */}
               {modalType === 'ADD' && (
                   <div>
                     <label className="block text-xs font-medium text-slate-400 mb-1">Tool Name</label>

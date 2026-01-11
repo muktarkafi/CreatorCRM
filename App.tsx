@@ -3,12 +3,13 @@ import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import DealBoard from './components/DealBoard';
 import ProjectBoard from './components/ProjectBoard';
+import CourseBoard from './components/CourseBoard';
 import FinishedProjects from './components/FinishedProjects';
 import Payments from './components/Payments';
 import LandingPage from './components/LandingPage';
 import Auth from './components/Auth';
 import Settings from './components/Settings';
-import { Deal, Project, ViewState, DealStage, ProjectStage, Transaction, User } from './types';
+import { Deal, Project, ViewState, DealStage, ProjectStage, Transaction, User, Course, Chapter } from './types';
 import { StorageService } from './services/storage';
 import { Menu } from 'lucide-react';
 
@@ -22,6 +23,7 @@ const App: React.FC = () => {
   const [currentView, setView] = useState<ViewState>('DASHBOARD');
   const [deals, setDeals] = useState<Deal[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [notification, setNotification] = useState<string | null>(null);
   const [privacyMode, setPrivacyMode] = useState<boolean>(false);
@@ -46,24 +48,27 @@ const App: React.FC = () => {
           setDeals(userData.deals);
           setProjects(userData.projects);
           setTransactions(userData.transactions);
+          setCourses(userData.courses);
       } else {
           // Clear data from state if no user
           setDeals([]);
           setProjects([]);
           setTransactions([]);
+          setCourses([]);
       }
   }, [user]);
 
-  // Persist Data whenever it changes (Debouncing could be added for optimization, simplified here)
+  // Persist Data
   useEffect(() => {
       if (user) {
           StorageService.saveUserData(user.id, {
               deals,
               projects,
-              transactions
+              transactions,
+              courses
           });
       }
-  }, [deals, projects, transactions, user]);
+  }, [deals, projects, transactions, courses, user]);
 
   // Auto-hide notification
   useEffect(() => {
@@ -79,6 +84,7 @@ const App: React.FC = () => {
       setDeals(data.deals);
       setProjects(data.projects);
       setTransactions(data.transactions);
+      setCourses(data.courses);
       setNotification('📂 Demo data loaded');
   };
 
@@ -88,6 +94,7 @@ const App: React.FC = () => {
       setDeals([]);
       setProjects([]);
       setTransactions([]);
+      setCourses([]);
       setNotification('🗑️ All data has been reset');
   };
 
@@ -95,11 +102,7 @@ const App: React.FC = () => {
   const handleLogin = (userData: User, stayLoggedIn: boolean) => {
       setUser(userData);
       setShowAuth(false);
-      
-      // We store the session in localStorage so refreshing the page keeps them logged in.
-      // In a real app, this would be a token.
       localStorage.setItem('reachmora_user_session', JSON.stringify(userData));
-
       setNotification(`👋 Welcome back, ${userData.name}!`);
   };
 
@@ -121,7 +124,9 @@ const App: React.FC = () => {
   };
 
 
-  // Data Handlers
+  // --- Data Handlers ---
+
+  // Deals
   const handleAddDeal = (dealInput: Omit<Deal, 'id' | 'stage' | 'lastActivity'>) => {
     const finalBrandName = dealInput.brandName || dealInput.toolName;
     const newDeal: Deal = {
@@ -143,9 +148,9 @@ const App: React.FC = () => {
   };
 
   const handleRemoveDeal = (dealId: string) => {
-    if (window.confirm('Are you sure you want to remove this deal?')) {
+    if (window.confirm('Are you sure you want to permanently delete this deal?')) {
         setDeals(prev => prev.filter(d => d.id !== dealId));
-        setNotification('🗑️ Deal removed from pipeline');
+        setNotification('🗑️ Deal permanently deleted');
     }
   };
 
@@ -157,10 +162,16 @@ const App: React.FC = () => {
       d.id === dealId ? { ...d, stage: newStage, lastActivity: new Date().toISOString() } : d
     ));
 
+    if (newStage === DealStage.CANCELLED) {
+        setNotification('Deal cancelled');
+        return;
+    }
+
     if (deal.stage !== DealStage.UPFRONT_RECEIVED && newStage === DealStage.UPFRONT_RECEIVED) {
       const newProject: Project = {
         id: `p-${Date.now()}`,
         dealId: deal.id,
+        type: 'SPONSORED',
         brandName: deal.brandName,
         title: `${deal.toolName} Tutorial`,
         stage: ProjectStage.TOOL_ACCESS,
@@ -184,6 +195,18 @@ const App: React.FC = () => {
         category: 'Sponsorship'
       });
     }
+  };
+
+  // Projects (Sponsored & Tutorials)
+  const handleAddProject = (newProjectData: Omit<Project, 'id' | 'progress' | 'archived'>) => {
+      const newProject: Project = {
+          id: `p-${Date.now()}`,
+          ...newProjectData,
+          progress: 0,
+          archived: false
+      };
+      setProjects(prev => [...prev, newProject]);
+      setNotification(newProject.type === 'TUTORIAL' ? '📹 Tutorial Started' : 'Project Added');
   };
 
   const handleMoveProject = (projectId: string, newStage: ProjectStage) => {
@@ -213,6 +236,70 @@ const App: React.FC = () => {
       setNotification('📦 Project archived to Finished Projects');
   };
 
+  // Courses
+  const handleAddCourse = (courseData: Omit<Course, 'id' | 'chapters' | 'progress'>) => {
+      const newCourse: Course = {
+          id: `c-${Date.now()}`,
+          ...courseData,
+          chapters: [],
+          progress: 0
+      };
+      setCourses(prev => [...prev, newCourse]);
+      setNotification('🎓 New course created');
+  };
+
+  const handleUpdateCourse = (courseId: string, updates: Partial<Course>) => {
+      setCourses(prev => prev.map(c => c.id === courseId ? { ...c, ...updates } : c));
+  };
+
+  const handleDeleteCourse = (courseId: string) => {
+      if(window.confirm('Delete this course and all its data?')) {
+          setCourses(prev => prev.filter(c => c.id !== courseId));
+          setNotification('Course deleted');
+      }
+  };
+
+  const handleAddChapter = (courseId: string, title: string) => {
+      const newChapter: Chapter = {
+          id: `ch-${Date.now()}`,
+          title,
+          stage: ProjectStage.SCRIPTING
+      };
+      
+      setCourses(prev => prev.map(c => {
+          if (c.id === courseId) {
+              const updatedChapters = [...c.chapters, newChapter];
+              // Recalculate progress logic here if needed (simple count for now)
+              return { ...c, chapters: updatedChapters };
+          }
+          return c;
+      }));
+  };
+
+  const handleUpdateChapter = (courseId: string, chapterId: string, updates: Partial<Chapter>) => {
+      setCourses(prev => prev.map(course => {
+          if(course.id !== courseId) return course;
+
+          const updatedChapters = course.chapters.map(ch => 
+             ch.id === chapterId ? { ...ch, ...updates } : ch
+          );
+
+          // Calculate Course Progress based on Chapter Stages
+          const stages = Object.values(ProjectStage);
+          const totalProgress = updatedChapters.reduce((acc, ch) => {
+             const stageIdx = stages.indexOf(ch.stage);
+             return acc + ((stageIdx + 1) / stages.length);
+          }, 0);
+          
+          const courseProgress = updatedChapters.length > 0 
+            ? Math.round((totalProgress / course.totalChapters) * 100) 
+            : 0;
+
+          return { ...course, chapters: updatedChapters, progress: Math.min(courseProgress, 100) };
+      }));
+  };
+
+  // Transactions
   const handleAddTransaction = (newTransaction: Omit<Transaction, 'id'>) => {
       const transaction: Transaction = {
           ...newTransaction,
@@ -232,11 +319,17 @@ const App: React.FC = () => {
   const renderContent = () => {
     switch (currentView) {
       case 'DASHBOARD':
-        return <Dashboard deals={deals} projects={projects.filter(p => !p.archived)} transactions={transactions} privacyMode={privacyMode} setPrivacyMode={setPrivacyMode} />;
+        return <Dashboard deals={deals} projects={projects.filter(p => !p.archived)} transactions={transactions} courses={courses} privacyMode={privacyMode} setPrivacyMode={setPrivacyMode} />;
       case 'DEALS':
         return <DealBoard deals={deals} onMoveDeal={handleMoveDeal} onAddDeal={handleAddDeal} onUpdateDeal={handleUpdateDeal} onRemoveDeal={handleRemoveDeal} />;
       case 'PROJECTS':
-        return <ProjectBoard projects={projects.filter(p => !p.archived)} onMoveProject={handleMoveProject} onUpdateProject={handleUpdateProject} onArchiveProject={handleArchiveProject} />;
+        // Sponsored Projects Mode
+        return <ProjectBoard mode="PROJECTS" projects={projects.filter(p => !p.archived)} onMoveProject={handleMoveProject} onUpdateProject={handleUpdateProject} onArchiveProject={handleArchiveProject} />;
+      case 'TUTORIALS':
+        // Free Tutorials Mode
+        return <ProjectBoard mode="TUTORIALS" projects={projects.filter(p => !p.archived)} onMoveProject={handleMoveProject} onUpdateProject={handleUpdateProject} onArchiveProject={handleArchiveProject} onAddProject={handleAddProject} />;
+      case 'COURSES':
+        return <CourseBoard courses={courses} onAddCourse={handleAddCourse} onUpdateCourse={handleUpdateCourse} onAddChapter={handleAddChapter} onUpdateChapter={handleUpdateChapter} onDeleteCourse={handleDeleteCourse} />;
       case 'FINISHED_PROJECTS':
         return <FinishedProjects projects={projects.filter(p => p.archived)} />;
       case 'PAYMENTS':
@@ -250,7 +343,7 @@ const App: React.FC = () => {
       case 'SETTINGS':
         return <Settings user={user} onResetData={resetData} onLoadSampleData={loadSampleData} onLogout={handleLogout} />;
       default:
-        return <Dashboard deals={deals} projects={projects} transactions={transactions} privacyMode={privacyMode} setPrivacyMode={setPrivacyMode} />;
+        return <Dashboard deals={deals} projects={projects} transactions={transactions} courses={courses} privacyMode={privacyMode} setPrivacyMode={setPrivacyMode} />;
     }
   };
 
