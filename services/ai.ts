@@ -1,23 +1,27 @@
 import { GoogleGenAI } from "@google/genai";
 
-// Initialize AI Client
-// Note: In a deployed environment, process.env.API_KEY would be populated.
-// If running locally without a build step that injects env vars, this might fail unless manually handled.
-// For the purpose of this "no-backend" app, we gracefully handle the missing key.
-const apiKey = process.env.API_KEY || ''; 
+// 1. Check for key in Local Storage (User Settings)
+// 2. Check for Environment Variable (Vercel/Hosting)
+// 3. Fallback to the provided default key
+const LS_KEY = 'reachmora_api_key';
+const DEFAULT_KEY = 'AIzaSyD3Slqu1or8ihF39lh4hpG1KQA_cpAO2iI'; // Provided Key
 
-let ai: GoogleGenAI | null = null;
-if (apiKey) {
-    ai = new GoogleGenAI({ apiKey });
-}
+export const getApiKey = () => {
+    return localStorage.getItem(LS_KEY) || process.env.API_KEY || DEFAULT_KEY;
+};
 
 export const AIService = {
     generateScript: async (title: string, brandName: string, type: string): Promise<string> => {
-        if (!ai) {
-            throw new Error("API Key not configured. Please deploy to Vercel/Netlify and set API_KEY.");
+        const apiKey = getApiKey();
+        
+        if (!apiKey) {
+            throw new Error("API Key is missing. Please add it in Settings.");
         }
 
         try {
+            // Initialize fresh instance with current key
+            const ai = new GoogleGenAI({ apiKey });
+            
             const prompt = `
                 Act as a professional YouTube scriptwriter.
                 Create a structured video script for a ${type} video.
@@ -40,9 +44,12 @@ export const AIService = {
             });
 
             return response.text || "Could not generate script.";
-        } catch (error) {
+        } catch (error: any) {
             console.error("AI Generation Error:", error);
-            throw new Error("Failed to generate script. Please check your API usage.");
+            if (error.message?.includes('403') || error.message?.includes('key')) {
+                throw new Error("Invalid API Key. Please check Settings.");
+            }
+            throw new Error("Failed to generate script. Please try again.");
         }
     }
 };

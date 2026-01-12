@@ -1,7 +1,8 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { User } from '../types';
 import { StorageService } from '../services/storage';
-import { Trash2, RefreshCw, User as UserIcon, LogOut, ShieldAlert, Download, Upload, FileJson } from 'lucide-react';
+import { Trash2, RefreshCw, User as UserIcon, LogOut, ShieldAlert, Download, Upload, FileJson, Key, Check } from 'lucide-react';
+import { getApiKey } from '../services/ai';
 
 interface SettingsProps {
   user: User | null;
@@ -12,6 +13,20 @@ interface SettingsProps {
 
 const Settings: React.FC<SettingsProps> = ({ user, onResetData, onLoadSampleData, onLogout }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [apiKey, setApiKey] = useState('');
+  const [isKeySaved, setIsKeySaved] = useState(false);
+
+  useEffect(() => {
+      // Load current key on mount (mask it partly for UI)
+      const current = localStorage.getItem('reachmora_api_key') || '';
+      setApiKey(current);
+  }, []);
+
+  const handleSaveKey = () => {
+      localStorage.setItem('reachmora_api_key', apiKey);
+      setIsKeySaved(true);
+      setTimeout(() => setIsKeySaved(false), 2000);
+  };
 
   const handleExport = () => {
     if (!user) return;
@@ -37,7 +52,6 @@ const Settings: React.FC<SettingsProps> = ({ user, onResetData, onLoadSampleData
         try {
             const content = e.target?.result as string;
             const parsedData = JSON.parse(content);
-            // Basic validation check
             if (Array.isArray(parsedData.deals) && Array.isArray(parsedData.projects)) {
                 StorageService.saveUserData(user.id, parsedData);
                 alert('Database imported successfully! The app will reload.');
@@ -91,6 +105,31 @@ const Settings: React.FC<SettingsProps> = ({ user, onResetData, onLoadSampleData
              >
                 <LogOut className="w-4 h-4" />
                 Sign Out
+             </button>
+         </div>
+      </div>
+
+      {/* AI Configuration */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+         <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+             <Key className="w-5 h-5 text-amber-400" /> AI Configuration
+         </h3>
+         <p className="text-slate-400 text-sm mb-4">
+             Enter your Google Gemini API Key to enable script generation features.
+         </p>
+         <div className="flex gap-4">
+             <input 
+                type="password" 
+                className="flex-1 bg-slate-950 border border-slate-700 rounded-lg p-3 text-white focus:border-indigo-500 focus:outline-none"
+                placeholder="AIzaSy..."
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+             />
+             <button 
+                onClick={handleSaveKey}
+                className={`px-6 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${isKeySaved ? 'bg-emerald-600 text-white' : 'bg-indigo-600 hover:bg-indigo-700 text-white'}`}
+             >
+                 {isKeySaved ? <Check className="w-4 h-4" /> : 'Save Key'}
              </button>
          </div>
       </div>
