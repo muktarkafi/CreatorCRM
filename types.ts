@@ -5,13 +5,15 @@ export enum DealStage {
   RATE_SENT = 'Rate Sent',
   NEGOTIATION = 'Negotiation',
   ACCEPTED_AWAITING_UPFRONT = 'Accepted Awaiting Upfront',
+  TOOL_ACCESS_GRANTED = 'Tool Access Granted',
   UPFRONT_RECEIVED = 'Upfront Received',
   REJECTED = 'Rejected',
-  CANCELLED = 'Cancelled', // New Stage
+  CANCELLED = 'Cancelled',
 }
 
 export enum ProjectStage {
   TOOL_ACCESS = 'Tool Access', // For sponsored
+  TESTING_RESEARCH = 'Testing & Research',
   CONCEPT = 'Concept & Research', // For tutorials
   SCRIPTING = 'Scripting',
   FILMING = 'Filming & Screen Cap',
@@ -69,6 +71,7 @@ export interface Project {
   scriptUrl?: string;
   videoUrl?: string;
   archived?: boolean;
+  cancelled?: boolean;
 }
 
 export interface Chapter {

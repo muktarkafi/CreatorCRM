@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { User } from '../types';
 import { StorageService } from '../services/storage';
-import { Trash2, RefreshCw, User as UserIcon, LogOut, ShieldAlert, Download, Upload, FileJson, Key, Check } from 'lucide-react';
+import { Trash2, RefreshCw, User as UserIcon, LogOut, ShieldAlert, Download, Upload, FileJson, Key, Check, Copy, Smartphone } from 'lucide-react';
 import { getApiKey } from '../services/ai';
 
 interface SettingsProps {
@@ -15,9 +15,11 @@ const Settings: React.FC<SettingsProps> = ({ user, onResetData, onLoadSampleData
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [apiKey, setApiKey] = useState('');
   const [isKeySaved, setIsKeySaved] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState('');
+  const [importString, setImportString] = useState('');
+  const [showImportInput, setShowImportInput] = useState(false);
 
   useEffect(() => {
-      // Load current key on mount (mask it partly for UI)
       const current = localStorage.getItem('reachmora_api_key') || '';
       setApiKey(current);
   }, []);
@@ -41,6 +43,32 @@ const Settings: React.FC<SettingsProps> = ({ user, onResetData, onLoadSampleData
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const handleCopyData = () => {
+    if (!user) return;
+    const data = StorageService.exportData(user.id);
+    const jsonString = JSON.stringify(data);
+    navigator.clipboard.writeText(jsonString).then(() => {
+        setCopyFeedback('Copied! Send this text to your phone.');
+        setTimeout(() => setCopyFeedback(''), 3000);
+    });
+  };
+
+  const handlePasteImport = () => {
+      if(!importString || !user) return;
+      try {
+          const parsedData = JSON.parse(importString);
+           if (Array.isArray(parsedData.deals) && Array.isArray(parsedData.projects)) {
+                StorageService.saveUserData(user.id, parsedData);
+                alert('Success! Data imported.');
+                window.location.reload();
+            } else {
+                alert('Invalid data format.');
+            }
+      } catch (e) {
+          alert('Could not parse data. Ensure you copied the entire string.');
+      }
   };
 
   const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -134,38 +162,79 @@ const Settings: React.FC<SettingsProps> = ({ user, onResetData, onLoadSampleData
          </div>
       </div>
 
-      {/* Offline Database Management */}
+      {/* Sync / Database */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
          <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-             <FileJson className="w-5 h-5 text-emerald-400" /> Database Management (Offline)
+             <Smartphone className="w-5 h-5 text-blue-400" /> Mobile Sync & Backup
          </h3>
          <p className="text-slate-400 text-sm mb-6 max-w-2xl">
-             You can download your entire database as a JSON file. This allows you to edit data in a text editor (like Visual Studio Code or Notepad) and re-import it, or simply backup your progress offline.
+             Transfer your data between devices. Use "Copy Data" to get a text code you can paste on your phone.
          </p>
 
-         <div className="flex flex-col sm:flex-row gap-4 mb-4">
-             <button 
-                onClick={handleExport}
-                className="flex items-center gap-2 px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium transition-colors shadow-lg shadow-emerald-500/20"
-             >
-                 <Download className="w-4 h-4" />
-                 Export Database (JSON)
-             </button>
+         <div className="flex flex-col gap-4">
+             {/* PC Actions */}
+             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <button 
+                    onClick={handleCopyData}
+                    className="flex items-center justify-center gap-2 px-5 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-medium transition-colors border border-slate-700"
+                >
+                    <Copy className="w-4 h-4" />
+                    {copyFeedback || 'Copy Data to Clipboard'}
+                </button>
+                 <button 
+                    onClick={handleExport}
+                    className="flex items-center justify-center gap-2 px-5 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-medium transition-colors border border-slate-700"
+                >
+                    <Download className="w-4 h-4" />
+                    Download JSON File
+                </button>
+             </div>
 
-             <button 
-                onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-2 px-5 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-medium transition-colors border border-slate-700"
-             >
-                 <Upload className="w-4 h-4" />
-                 Import Database
-             </button>
-             <input 
-                type="file" 
-                ref={fileInputRef} 
-                onChange={handleImport} 
-                className="hidden" 
-                accept=".json"
-            />
+             {/* Import Section */}
+             <div className="border-t border-slate-800 pt-4 mt-2">
+                <button 
+                    onClick={() => setShowImportInput(!showImportInput)}
+                    className="text-indigo-400 text-sm hover:underline mb-3 block"
+                >
+                    {showImportInput ? 'Hide Import Tools' : 'I want to Import Data...'}
+                </button>
+                
+                {showImportInput && (
+                    <div className="space-y-4 animate-fade-in">
+                        <div className="flex gap-2">
+                            <input 
+                                type="text"
+                                placeholder="Paste data string here..."
+                                className="flex-1 bg-slate-950 border border-slate-700 rounded-lg p-2 text-xs text-white"
+                                value={importString}
+                                onChange={(e) => setImportString(e.target.value)}
+                            />
+                            <button 
+                                onClick={handlePasteImport}
+                                className="bg-emerald-600 text-white px-4 rounded-lg text-xs font-bold"
+                            >
+                                Import Text
+                            </button>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="text-slate-500 text-xs">Or upload file:</span>
+                            <button 
+                                onClick={() => fileInputRef.current?.click()}
+                                className="text-xs bg-slate-800 px-3 py-1 rounded text-white border border-slate-700"
+                            >
+                                Select JSON File
+                            </button>
+                            <input 
+                                type="file" 
+                                ref={fileInputRef} 
+                                onChange={handleImport} 
+                                className="hidden" 
+                                accept=".json"
+                            />
+                        </div>
+                    </div>
+                )}
+             </div>
          </div>
       </div>
 

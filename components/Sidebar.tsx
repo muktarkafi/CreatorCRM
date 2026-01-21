@@ -25,10 +25,10 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, companyName, on
 
   return (
     <>
-      {/* Sidebar Container */}
+      {/* Sidebar Container - Mobile Z-index higher than overlay */}
       <aside 
         className={`
-          fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 border-r border-slate-800 flex flex-col h-full transition-transform duration-300 ease-in-out
+          fixed inset-y-0 left-0 z-[60] w-64 bg-slate-900 border-r border-slate-800 flex flex-col h-full transition-transform duration-300 ease-in-out shadow-2xl lg:shadow-none
           lg:static lg:translate-x-0
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
         `}
@@ -60,7 +60,9 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, companyName, on
                 key={item.id}
                 onClick={() => {
                   setView(item.id as ViewState);
-                  onClose?.(); // Close sidebar on mobile when item clicked
+                  if (window.innerWidth < 1024) {
+                      onClose?.(); 
+                  }
                 }}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 group ${
                   isActive
@@ -79,7 +81,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, companyName, on
           <button 
                onClick={() => {
                    setView('SETTINGS');
-                   onClose?.();
+                   if (window.innerWidth < 1024) onClose?.();
                }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
                   currentView === 'SETTINGS' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'

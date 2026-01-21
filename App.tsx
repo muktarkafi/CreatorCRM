@@ -37,7 +37,6 @@ const App: React.FC = () => {
     if (storedUser) {
       const parsedUser = JSON.parse(storedUser);
       setUser(parsedUser);
-      // Data loading happens in the user dependency effect below
     }
   }, []);
 
@@ -50,7 +49,6 @@ const App: React.FC = () => {
           setTransactions(userData.transactions);
           setCourses(userData.courses);
       } else {
-          // Clear data from state if no user
           setDeals([]);
           setProjects([]);
           setTransactions([]);
@@ -70,7 +68,6 @@ const App: React.FC = () => {
       }
   }, [deals, projects, transactions, courses, user]);
 
-  // Auto-hide notification
   useEffect(() => {
     if (notification) {
       const timer = setTimeout(() => setNotification(null), 3000);
@@ -98,7 +95,6 @@ const App: React.FC = () => {
       setNotification('🗑️ All data has been reset');
   };
 
-  // Auth Handlers
   const handleLogin = (userData: User, stayLoggedIn: boolean) => {
       setUser(userData);
       setShowAuth(false);
@@ -123,10 +119,6 @@ const App: React.FC = () => {
       setShowAuth(true);
   };
 
-
-  // --- Data Handlers ---
-
-  // Deals
   const handleAddDeal = (dealInput: Omit<Deal, 'id' | 'stage' | 'lastActivity'>) => {
     const finalBrandName = dealInput.brandName || dealInput.toolName;
     const newDeal: Deal = {
@@ -167,7 +159,13 @@ const App: React.FC = () => {
         return;
     }
 
-    if (deal.stage !== DealStage.UPFRONT_RECEIVED && newStage === DealStage.UPFRONT_RECEIVED) {
+    // Trigger project creation if moving to Upfront Received OR Tool Access Granted
+    const isProductiveStage = newStage === DealStage.UPFRONT_RECEIVED || newStage === DealStage.TOOL_ACCESS_GRANTED;
+    const projectAlreadyExists = projects.some(p => p.dealId === dealId);
+
+    if (isProductiveStage && !projectAlreadyExists) {
+      const isUpfront = newStage === DealStage.UPFRONT_RECEIVED;
+      
       const newProject: Project = {
         id: `p-${Date.now()}`,
         dealId: deal.id,
@@ -176,49 +174,49 @@ const App: React.FC = () => {
         title: `${deal.toolName} Tutorial`,
         stage: ProjectStage.TOOL_ACCESS,
         dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
-        upfrontPaid: true,
+        upfrontPaid: isUpfront,
         finalPaid: false,
         totalValue: deal.value,
         progress: 5,
-        archived: false
+        archived: false,
+        cancelled: false
       };
       
       setProjects(prev => [...prev, newProject]);
       setNotification(`🚀 Project created for ${deal.brandName}!`);
 
-      const upfrontAmount = deal.value * 0.5;
-      handleAddTransaction({
-        date: new Date().toISOString().split('T')[0],
-        description: `Upfront Payment: ${deal.brandName}`,
-        amount: upfrontAmount,
-        type: 'INCOME',
-        category: 'Sponsorship'
-      });
+      if (isUpfront) {
+        const upfrontAmount = deal.value * 0.5;
+        handleAddTransaction({
+          date: new Date().toISOString().split('T')[0],
+          description: `Upfront Payment: ${deal.brandName}`,
+          amount: upfrontAmount,
+          type: 'INCOME',
+          category: 'Sponsorship'
+        });
+      }
     }
   };
 
-  // Projects (Sponsored & Tutorials)
-  const handleAddProject = (newProjectData: Omit<Project, 'id' | 'progress' | 'archived'>) => {
+  const handleAddProject = (newProjectData: Omit<Project, 'id' | 'progress' | 'archived' | 'cancelled'>) => {
       const newProject: Project = {
           id: `p-${Date.now()}`,
           ...newProjectData,
           progress: 0,
-          archived: false
+          archived: false,
+          cancelled: false
       };
       setProjects(prev => [...prev, newProject]);
       setNotification(newProject.type === 'TUTORIAL' ? '📹 Tutorial Started' : 'Project Added');
   };
 
   const handleMoveProject = (projectId: string, newStage: ProjectStage) => {
-    const project = projects.find(p => p.id === projectId);
-    if (!project) return;
-
     const stages = Object.values(ProjectStage);
     const stageIndex = stages.indexOf(newStage);
     const progress = Math.round(((stageIndex + 1) / stages.length) * 100);
 
     setProjects(prev => prev.map(p => 
-      p.id === projectId ? { ...p, stage: newStage, progress } : p
+      p.id === projectId ? { ...p, stage: newStage, progress, cancelled: false } : p
     ));
   };
 
@@ -234,6 +232,25 @@ const App: React.FC = () => {
         p.id === projectId ? { ...p, archived: true } : p
       ));
       setNotification('📦 Project archived to Finished Projects');
+  };
+
+  const handleDeleteProject = (projectId: string) => {
+    const project = projects.find(p => p.id === projectId);
+    if (!project) return;
+
+    if (project.cancelled) {
+        if (window.confirm('Permanently delete this project from history?')) {
+            setProjects(prev => prev.filter(p => p.id !== projectId));
+            setNotification('🗑️ Project permanently deleted');
+        }
+    } else {
+        if (window.confirm('Cancel this project? It will be moved to the Cancelled Projects section.')) {
+            setProjects(prev => prev.map(p => 
+                p.id === projectId ? { ...p, cancelled: true } : p
+            ));
+            setNotification('🚫 Project cancelled');
+        }
+    }
   };
 
   // Courses
@@ -269,7 +286,6 @@ const App: React.FC = () => {
       setCourses(prev => prev.map(c => {
           if (c.id === courseId) {
               const updatedChapters = [...c.chapters, newChapter];
-              // Recalculate progress logic here if needed (simple count for now)
               return { ...c, chapters: updatedChapters };
           }
           return c;
@@ -284,7 +300,6 @@ const App: React.FC = () => {
              ch.id === chapterId ? { ...ch, ...updates } : ch
           );
 
-          // Calculate Course Progress based on Chapter Stages
           const stages = Object.values(ProjectStage);
           const totalProgress = updatedChapters.reduce((acc, ch) => {
              const stageIdx = stages.indexOf(ch.stage);
@@ -319,15 +334,13 @@ const App: React.FC = () => {
   const renderContent = () => {
     switch (currentView) {
       case 'DASHBOARD':
-        return <Dashboard deals={deals} projects={projects.filter(p => !p.archived)} transactions={transactions} courses={courses} privacyMode={privacyMode} setPrivacyMode={setPrivacyMode} />;
+        return <Dashboard deals={deals} projects={projects.filter(p => !p.archived && !p.cancelled)} transactions={transactions} courses={courses} privacyMode={privacyMode} setPrivacyMode={setPrivacyMode} />;
       case 'DEALS':
         return <DealBoard deals={deals} onMoveDeal={handleMoveDeal} onAddDeal={handleAddDeal} onUpdateDeal={handleUpdateDeal} onRemoveDeal={handleRemoveDeal} />;
       case 'PROJECTS':
-        // Sponsored Projects Mode
-        return <ProjectBoard mode="PROJECTS" projects={projects.filter(p => !p.archived)} onMoveProject={handleMoveProject} onUpdateProject={handleUpdateProject} onArchiveProject={handleArchiveProject} />;
+        return <ProjectBoard mode="PROJECTS" projects={projects.filter(p => !p.archived)} onMoveProject={handleMoveProject} onUpdateProject={handleUpdateProject} onArchiveProject={handleArchiveProject} onDeleteProject={handleDeleteProject} />;
       case 'TUTORIALS':
-        // Free Tutorials Mode
-        return <ProjectBoard mode="TUTORIALS" projects={projects.filter(p => !p.archived)} onMoveProject={handleMoveProject} onUpdateProject={handleUpdateProject} onArchiveProject={handleArchiveProject} onAddProject={handleAddProject} />;
+        return <ProjectBoard mode="TUTORIALS" projects={projects.filter(p => !p.archived)} onMoveProject={handleMoveProject} onUpdateProject={handleUpdateProject} onArchiveProject={handleArchiveProject} onAddProject={handleAddProject} onDeleteProject={handleDeleteProject} />;
       case 'COURSES':
         return <CourseBoard courses={courses} onAddCourse={handleAddCourse} onUpdateCourse={handleUpdateCourse} onAddChapter={handleAddChapter} onUpdateChapter={handleUpdateChapter} onDeleteCourse={handleDeleteCourse} />;
       case 'FINISHED_PROJECTS':
@@ -335,11 +348,7 @@ const App: React.FC = () => {
       case 'PAYMENTS':
         return <Payments transactions={transactions} onAddTransaction={handleAddTransaction} onDeleteTransaction={handleDeleteTransaction} />;
       case 'INSIGHTS':
-        return (
-            <div className="p-8 pt-20 lg:pt-8 flex items-center justify-center h-full text-slate-500">
-                <p>Insights & Analytics (Coming Soon)</p>
-            </div>
-        );
+        return <div className="p-8 pt-20 lg:pt-8 flex items-center justify-center h-full text-slate-500"><p>Insights & Analytics (Coming Soon)</p></div>;
       case 'SETTINGS':
         return <Settings user={user} onResetData={resetData} onLoadSampleData={loadSampleData} onLogout={handleLogout} />;
       default:
@@ -347,11 +356,8 @@ const App: React.FC = () => {
     }
   };
 
-  // View Logic: Landing Page -> Auth -> App
   if (!user) {
-      if (showAuth) {
-          return <Auth onLogin={handleLogin} initialMode={authMode} />;
-      }
+      if (showAuth) return <Auth onLogin={handleLogin} initialMode={authMode} />;
       return <LandingPage onGetStarted={handleGetStarted} onLogin={handleSignInClick} />;
   }
 
@@ -366,31 +372,15 @@ const App: React.FC = () => {
         onClose={() => setMobileMenuOpen(false)}
       />
 
-      {/* Mobile Overlay */}
       {mobileMenuOpen && (
-        <div 
-          className="fixed inset-0 bg-black/60 z-40 lg:hidden backdrop-blur-sm transition-opacity"
-          onClick={() => setMobileMenuOpen(false)}
-        />
+        <div className="fixed inset-0 bg-black/60 z-40 lg:hidden backdrop-blur-sm transition-opacity" onClick={() => setMobileMenuOpen(false)} />
       )}
       
       <main className="flex-1 overflow-hidden relative flex flex-col w-full">
-        {/* Mobile Header Trigger */}
         <div className="lg:hidden absolute top-4 left-4 z-30">
-            <button 
-                onClick={() => setMobileMenuOpen(true)}
-                className="p-2 bg-slate-900 border border-slate-800 rounded-lg text-white shadow-lg hover:bg-slate-800 transition-colors"
-            >
-                <Menu className="w-5 h-5" />
-            </button>
+            <button onClick={() => setMobileMenuOpen(true)} className="p-2 bg-slate-900 border border-slate-800 rounded-lg text-white shadow-lg hover:bg-slate-800 transition-colors"><Menu className="w-5 h-5" /></button>
         </div>
-
-        {/* Main Content Scrollable Area */}
-        <div className="flex-1 overflow-auto custom-scrollbar relative">
-            {renderContent()}
-        </div>
-
-        {/* Floating Notification Toast */}
+        <div className="flex-1 overflow-auto custom-scrollbar relative">{renderContent()}</div>
         {notification && (
             <div className="absolute bottom-8 right-8 bg-slate-800 border border-indigo-500/50 text-white px-6 py-4 rounded-xl shadow-2xl shadow-black/50 flex items-center gap-3 animate-slide-up z-50">
                 <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
